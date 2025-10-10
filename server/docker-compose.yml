@@ -1,0 +1,61 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: chicken-feed-db
+    environment:
+      POSTGRES_USER: chicken_admin
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-chicken_secure_pass_2024}
+      POSTGRES_DB: chicken_feed_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    networks:
+      - chicken-net
+    restart: unless-stopped
+
+  backend:
+    build: ./backend
+    container_name: chicken-feed-backend
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      DATABASE_URL: postgresql://chicken_admin:${DB_PASSWORD:-chicken_secure_pass_2024}@postgres:5432/chicken_feed_db
+      JWT_SECRET: ${JWT_SECRET:-chicken_jwt_secret_2024}
+    ports:
+      - "3001:3001"
+    depends_on:
+      - postgres
+    networks:
+      - chicken-net
+    restart: unless-stopped
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+
+  frontend:
+    build: ./frontend
+    container_name: chicken-feed-frontend
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:3001
+    ports:
+      - "37210:3000"
+    depends_on:
+      - backend
+    networks:
+      - chicken-net
+    restart: unless-stopped
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+
+networks:
+  chicken-net:
+    driver: bridge
+
+volumes:
+  postgres_data:

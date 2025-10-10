@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-라즈베리파이 서보모터를 활용한 닭 먹이 자동 급여 시스템
+라즈베리파이 서보모터를 활용한 닭 먹이 자동 급여 시스템 (서버 연동 버전)
 KST 시간 기준으로 설정된 시간에 서보모터를 동작시켜 먹이통 개폐
+모든 이벤트를 원격 서버로 전송
 """
 
 import RPi.GPIO as GPIO
@@ -9,18 +10,23 @@ import schedule
 import time
 import json
 import logging
+import requests
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 import signal
 import sys
 
 # 서보모터 설정
-SERVO_PIN = 12  # 서보 핀
-SERVO_MAX_DUTY = 12  # 서보의 최대(180도) 위치의 주기
-SERVO_MIN_DUTY = 3  # 서보의 최소(0도) 위치의 주기
+SERVO_PIN = 12
+SERVO_MAX_DUTY = 12
+SERVO_MIN_DUTY = 3
 
 # 한국 시간대 설정
 KST = timezone(timedelta(hours=9))
+
+# 서버 설정
+SERVER_URL = "http://localhost:3001"  # 서버 주소 (필요시 변경)
+DEVICE_ID = "raspberry-pi-001"
 
 # 로깅 설정
 logging.basicConfig(
@@ -34,24 +40,26 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-class ChickenFeeder:
+class ChickenFeederClient:
     def __init__(self, config_path='config.json'):
-        """닭 먹이 급여기 초기화"""
+        """닭 먹이 급여기 클라이언트 초기화"""
         self.config_path = Path(config_path)
         self.config = self.load_config()
         self.servo = None
         self.is_open = False
         self.setup_gpio()
+        self.register_with_server()
 
     def load_config(self):
         """설정 파일 로드"""
         if not self.config_path.exists():
-            # 기본 설정 생성
             default_config = {
                 "feeding_times": ["07:00", "12:00", "18:00"],
                 "feeding_duration_minutes": 30,
                 "open_angle": 90,
-                "close_angle": 0
+                "close_angle": 0,
+                "server_url": SERVER_URL,
+                "device_id": DEVICE_ID
             }
             with open(self.config_path, 'w') as f:
                 json.dump(default_config, f, indent=2)
@@ -68,9 +76,60 @@ class ChickenFeeder:
         GPIO.setwarnings(False)
         GPIO.setmode(GPIO.BOARD)
         GPIO.setup(SERVO_PIN, GPIO.OUT)
-        self.servo = GPIO.PWM(SERVO_PIN, 50)  # 50Hz PWM
+        self.servo = GPIO.PWM(SERVO_PIN, 50)
         self.servo.start(0)
         logger.info("GPIO 설정 완료")
+
+    def register_with_server(self):
+        """서버에 장치 등록 및 설정 업데이트"""
+        try:
+            server_url = self.config.get('server_url', SERVER_URL)
+            device_id = self.config.get('device_id', DEVICE_ID)
+
+            data = {
+                "device_id": device_id,
+                "feeding_times": self.config.get('feeding_times', ["07:00", "12:00", "18:00"]),
+                "duration_minutes": self.config.get('feeding_duration_minutes', 30)
+            }
+
+            response = requests.post(
+                f"{server_url}/api/device/config",
+                json=data,
+                timeout=5
+            )
+
+            if response.status_code == 200:
+                logger.info(f"서버에 장치 등록 완료: {device_id}")
+            else:
+                logger.warning(f"서버 등록 실패: {response.status_code}")
+
+        except Exception as e:
+            logger.error(f"서버 등록 중 오류: {e}")
+
+    def send_log_to_server(self, action, details=None):
+        """서버로 로그 전송"""
+        try:
+            server_url = self.config.get('server_url', SERVER_URL)
+            device_id = self.config.get('device_id', DEVICE_ID)
+
+            data = {
+                "device_id": device_id,
+                "action": action,
+                "timestamp": datetime.now(KST).isoformat(),
+                "details": details or {}
+            }
+
+            response = requests.post(
+                f"{server_url}/api/feeding/log",
+                json=data,
+                timeout=5
+            )
+
+            if response.status_code != 200:
+                logger.warning(f"로그 전송 실패: {response.status_code}")
+
+        except Exception as e:
+            logger.error(f"로그 전송 중 오류: {e}")
 
     def set_servo_position(self, degree):
         """서보모터 위치 설정"""
@@ -83,28 +142,36 @@ class ChickenFeeder:
         logger.debug(f"서보 위치: {degree}도 (Duty: {duty:.2f})")
 
         self.servo.ChangeDutyCycle(duty)
-        time.sleep(0.5)  # 서보가 위치에 도달할 시간
-        self.servo.ChangeDutyCycle(0)  # 서보 떨림 방지
+        time.sleep(0.5)
+        self.servo.ChangeDutyCycle(0)
 
     def open_feeder(self):
         """먹이통 열기"""
         if not self.is_open:
             open_angle = self.config.get('open_angle', 90)
             logger.info(f"먹이통 열기 - {open_angle}도")
-            self.set_servo_position(open_angle)
-            self.is_open = True
 
-            # 설정된 시간 후 자동으로 닫기
-            duration = self.config.get('feeding_duration_minutes', 30)
-            schedule.enter(duration * 60, 1, self.close_feeder)
+            try:
+                self.set_servo_position(open_angle)
+                self.is_open = True
+                self.send_log_to_server("open", {"angle": open_angle})
+            except Exception as e:
+                logger.error(f"먹이통 열기 실패: {e}")
+                self.send_log_to_server("error", {"message": str(e)})
 
     def close_feeder(self):
         """먹이통 닫기"""
         if self.is_open:
             close_angle = self.config.get('close_angle', 0)
             logger.info(f"먹이통 닫기 - {close_angle}도")
-            self.set_servo_position(close_angle)
-            self.is_open = False
+
+            try:
+                self.set_servo_position(close_angle)
+                self.is_open = False
+                self.send_log_to_server("close", {"angle": close_angle})
+            except Exception as e:
+                logger.error(f"먹이통 닫기 실패: {e}")
+                self.send_log_to_server("error", {"message": str(e)})
 
     def feeding_job(self):
         """급여 작업 실행"""
@@ -112,7 +179,6 @@ class ChickenFeeder:
         logger.info(f"급여 시작 - {now.strftime('%Y-%m-%d %H:%M:%S KST')}")
         self.open_feeder()
 
-        # 지정된 시간 후 닫기 예약
         duration = self.config.get('feeding_duration_minutes', 30)
         schedule.enter(duration * 60, 1, self.close_feeding_job)
 
@@ -124,7 +190,7 @@ class ChickenFeeder:
 
     def schedule_feedings(self):
         """급여 스케줄 설정"""
-        schedule.clear()  # 기존 스케줄 삭제
+        schedule.clear()
 
         for feeding_time in self.config.get('feeding_times', []):
             schedule.every().day.at(feeding_time).do(self.feeding_job)
@@ -135,23 +201,34 @@ class ChickenFeeder:
         logger.info("설정 파일 재로드 중...")
         self.config = self.load_config()
         self.schedule_feedings()
+        self.register_with_server()
         logger.info("설정 파일 재로드 완료")
 
     def run(self):
         """메인 실행 루프"""
-        logger.info("닭 먹이 자동 급여 시스템 시작")
+        logger.info("닭 먹이 자동 급여 시스템 시작 (서버 연동 모드)")
         logger.info(f"현재 시간: {datetime.now(KST).strftime('%Y-%m-%d %H:%M:%S KST')}")
+        logger.info(f"서버 URL: {self.config.get('server_url', SERVER_URL)}")
+        logger.info(f"장치 ID: {self.config.get('device_id', DEVICE_ID)}")
+
+        # 시작 로그 전송
+        self.send_log_to_server("startup", {
+            "config": {
+                "feeding_times": self.config.get('feeding_times'),
+                "duration_minutes": self.config.get('feeding_duration_minutes')
+            }
+        })
 
         # 초기 스케줄 설정
         self.schedule_feedings()
 
-        # 시작 시 먹이통 닫기 (초기 상태 보장)
+        # 시작 시 먹이통 닫기
         self.close_feeder()
 
         try:
             while True:
                 schedule.run_pending()
-                time.sleep(10)  # 10초마다 스케줄 체크
+                time.sleep(10)
 
         except KeyboardInterrupt:
             logger.info("프로그램 종료 신호 받음")
@@ -161,7 +238,11 @@ class ChickenFeeder:
     def cleanup(self):
         """GPIO 정리"""
         logger.info("시스템 종료 중...")
-        self.close_feeder()  # 종료 전 먹이통 닫기
+
+        # 종료 로그 전송
+        self.send_log_to_server("shutdown", {})
+
+        self.close_feeder()
         time.sleep(1)
         self.servo.stop()
         GPIO.cleanup()
@@ -175,9 +256,9 @@ def signal_handler(sig, frame):
 
 
 if __name__ == "__main__":
-    # SIGTERM 시그널 핸들러 등록 (systemd 종료 시)
+    # SIGTERM 시그널 핸들러 등록
     signal.signal(signal.SIGTERM, signal_handler)
 
-    # 먹이 급여기 실행
-    feeder = ChickenFeeder()
+    # 먹이 급여기 클라이언트 실행
+    feeder = ChickenFeederClient()
     feeder.run()

@@ -1,16 +1,17 @@
 [Unit]
-Description=Chicken Feeder Automation Service
-After=multi-user.target
+Description=Chicken Feeder Automation Service (Server Connected)
+After=network.target multi-user.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/python3 /home/pyotel/src/chicken_feed/chicken_feeder.py
+ExecStart=/usr/bin/python3 /home/pyotel/src/chicken_feed/chicken_feeder_client.py
 WorkingDirectory=/home/pyotel/src/chicken_feed
 StandardOutput=journal
 StandardError=journal
 Restart=always
 RestartSec=10
 User=pyotel
+Environment="PYTHONUNBUFFERED=1"
 
 [Install]
 WantedBy=multi-user.target

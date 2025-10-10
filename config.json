@@ -7,10 +7,14 @@
   "feeding_duration_minutes": 30,
   "open_angle": 90,
   "close_angle": 0,
+  "server_url": "http://localhost:3001",
+  "device_id": "raspberry-pi-001",
   "description": {
     "feeding_times": "급여 시간 목록 (KST 기준, HH:MM 형식)",
     "feeding_duration_minutes": "먹이통이 열려있는 시간 (분)",
     "open_angle": "먹이통을 여는 서보모터 각도 (0-180)",
-    "close_angle": "먹이통을 닫는 서보모터 각도 (0-180)"
+    "close_angle": "먹이통을 닫는 서보모터 각도 (0-180)",
+    "server_url": "로깅 서버 API URL (원격 모니터링용)",
+    "device_id": "장치 고유 식별자"
   }
 }
