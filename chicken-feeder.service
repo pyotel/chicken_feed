@@ -1,0 +1,16 @@
+[Unit]
+Description=Chicken Feeder Automation Service
+After=multi-user.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /home/pyotel/src/chicken_feed/chicken_feeder.py
+WorkingDirectory=/home/pyotel/src/chicken_feed
+StandardOutput=journal
+StandardError=journal
+Restart=always
+RestartSec=10
+User=pyotel
+
+[Install]
+WantedBy=multi-user.target
