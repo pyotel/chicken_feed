@@ -10,8 +10,8 @@ import sys
 
 SERVO_PIN = 12
 SERVO_STOP_DUTY = 7.5      # 정지
-SERVO_CW_DUTY = 12         # 시계방향 (열기)
-SERVO_CCW_DUTY = 3         # 반시계방향 (닫기)
+SERVO_CW_DUTY = 9.75       # 시계방향 (열기) - 절반 속도
+SERVO_CCW_DUTY = 5.25      # 반시계방향 (닫기) - 절반 속도
 DEFAULT_ROTATION_TIME = 10  # 10바퀴 회전 시간 (초)
 
 def setup_gpio():

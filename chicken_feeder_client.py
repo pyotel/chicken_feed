@@ -16,12 +16,12 @@ from pathlib import Path
 import signal
 import sys
 
-# 서보모터 설정 (연속 회전 서보)
+# 서보모터 기본 설정 (연속 회전 서보)
 SERVO_PIN = 12
-SERVO_STOP_DUTY = 7.5      # 정지
-SERVO_CW_DUTY = 12         # 시계방향 (열기)
-SERVO_CCW_DUTY = 3         # 반시계방향 (닫기)
-ROTATION_TIME = 10         # 10바퀴 회전에 필요한 시간 (초)
+DEFAULT_STOP_DUTY = 7.5      # 정지
+DEFAULT_CW_DUTY = 9.75       # 시계방향 (열기) - 절반 속도
+DEFAULT_CCW_DUTY = 5.25      # 반시계방향 (닫기) - 절반 속도
+DEFAULT_ROTATION_TIME = 10   # 10바퀴 회전에 필요한 시간 (초)
 
 # 한국 시간대 설정
 KST = timezone(timedelta(hours=9))
@@ -58,7 +58,10 @@ class ChickenFeederClient:
             default_config = {
                 "feeding_times": ["07:00", "12:00", "18:00"],
                 "feeding_duration_minutes": 30,
-                "rotation_time": 10,
+                "rotation_time": DEFAULT_ROTATION_TIME,
+                "servo_stop_duty": DEFAULT_STOP_DUTY,
+                "servo_cw_duty": DEFAULT_CW_DUTY,
+                "servo_ccw_duty": DEFAULT_CCW_DUTY,
                 "server_url": SERVER_URL,
                 "device_id": DEVICE_ID
             }
@@ -139,25 +142,29 @@ class ChickenFeederClient:
             direction: 'cw' (시계방향/열기) 또는 'ccw' (반시계방향/닫기)
             duration: 회전 시간 (초)
         """
+        stop_duty = self.config.get('servo_stop_duty', DEFAULT_STOP_DUTY)
+        cw_duty = self.config.get('servo_cw_duty', DEFAULT_CW_DUTY)
+        ccw_duty = self.config.get('servo_ccw_duty', DEFAULT_CCW_DUTY)
+
         if direction == 'cw':
-            duty = SERVO_CW_DUTY
+            duty = cw_duty
         elif direction == 'ccw':
-            duty = SERVO_CCW_DUTY
+            duty = ccw_duty
         else:
-            duty = SERVO_STOP_DUTY
+            duty = stop_duty
 
         logger.debug(f"서보 회전: {direction}, Duty: {duty}, 시간: {duration}초")
 
         self.servo.ChangeDutyCycle(duty)
         time.sleep(duration)
-        self.servo.ChangeDutyCycle(SERVO_STOP_DUTY)  # 정지
+        self.servo.ChangeDutyCycle(stop_duty)  # 정지
         time.sleep(0.1)
         self.servo.ChangeDutyCycle(0)  # PWM 신호 끄기 (떨림 방지)
 
     def open_feeder(self):
         """먹이통 열기 - 시계방향으로 10바퀴 회전"""
         if not self.is_open:
-            rotation_time = self.config.get('rotation_time', ROTATION_TIME)
+            rotation_time = self.config.get('rotation_time', DEFAULT_ROTATION_TIME)
             logger.info(f"먹이통 열기 - 시계방향 {rotation_time}초 회전")
 
             try:
@@ -171,7 +178,7 @@ class ChickenFeederClient:
     def close_feeder(self):
         """먹이통 닫기 - 반시계방향으로 10바퀴 회전"""
         if self.is_open:
-            rotation_time = self.config.get('rotation_time', ROTATION_TIME)
+            rotation_time = self.config.get('rotation_time', DEFAULT_ROTATION_TIME)
             logger.info(f"먹이통 닫기 - 반시계방향 {rotation_time}초 회전")
 
             try:
