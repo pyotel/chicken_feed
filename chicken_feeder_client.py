@@ -16,16 +16,18 @@ from pathlib import Path
 import signal
 import sys
 
-# 서보모터 설정
+# 서보모터 설정 (연속 회전 서보)
 SERVO_PIN = 12
-SERVO_MAX_DUTY = 12
-SERVO_MIN_DUTY = 3
+SERVO_STOP_DUTY = 7.5      # 정지
+SERVO_CW_DUTY = 12         # 시계방향 (열기)
+SERVO_CCW_DUTY = 3         # 반시계방향 (닫기)
+ROTATION_TIME = 10         # 10바퀴 회전에 필요한 시간 (초)
 
 # 한국 시간대 설정
 KST = timezone(timedelta(hours=9))
 
 # 서버 설정
-SERVER_URL = "http://localhost:3001"  # 서버 주소 (필요시 변경)
+SERVER_URL = "http://ketiict.com:37211"  # 서버 주소
 DEVICE_ID = "raspberry-pi-001"
 
 # 로깅 설정
@@ -56,8 +58,7 @@ class ChickenFeederClient:
             default_config = {
                 "feeding_times": ["07:00", "12:00", "18:00"],
                 "feeding_duration_minutes": 30,
-                "open_angle": 90,
-                "close_angle": 0,
+                "rotation_time": 10,
                 "server_url": SERVER_URL,
                 "device_id": DEVICE_ID
             }
@@ -131,44 +132,52 @@ class ChickenFeederClient:
         except Exception as e:
             logger.error(f"로그 전송 중 오류: {e}")
 
-    def set_servo_position(self, degree):
-        """서보모터 위치 설정"""
-        if degree > 180:
-            degree = 180
-        elif degree < 0:
-            degree = 0
+    def rotate_servo(self, direction, duration):
+        """연속 회전 서보 모터 제어
 
-        duty = SERVO_MIN_DUTY + (degree * (SERVO_MAX_DUTY - SERVO_MIN_DUTY) / 180.0)
-        logger.debug(f"서보 위치: {degree}도 (Duty: {duty:.2f})")
+        Args:
+            direction: 'cw' (시계방향/열기) 또는 'ccw' (반시계방향/닫기)
+            duration: 회전 시간 (초)
+        """
+        if direction == 'cw':
+            duty = SERVO_CW_DUTY
+        elif direction == 'ccw':
+            duty = SERVO_CCW_DUTY
+        else:
+            duty = SERVO_STOP_DUTY
+
+        logger.debug(f"서보 회전: {direction}, Duty: {duty}, 시간: {duration}초")
 
         self.servo.ChangeDutyCycle(duty)
-        time.sleep(0.5)
-        self.servo.ChangeDutyCycle(0)
+        time.sleep(duration)
+        self.servo.ChangeDutyCycle(SERVO_STOP_DUTY)  # 정지
+        time.sleep(0.1)
+        self.servo.ChangeDutyCycle(0)  # PWM 신호 끄기 (떨림 방지)
 
     def open_feeder(self):
-        """먹이통 열기"""
+        """먹이통 열기 - 시계방향으로 10바퀴 회전"""
         if not self.is_open:
-            open_angle = self.config.get('open_angle', 90)
-            logger.info(f"먹이통 열기 - {open_angle}도")
+            rotation_time = self.config.get('rotation_time', ROTATION_TIME)
+            logger.info(f"먹이통 열기 - 시계방향 {rotation_time}초 회전")
 
             try:
-                self.set_servo_position(open_angle)
+                self.rotate_servo('cw', rotation_time)
                 self.is_open = True
-                self.send_log_to_server("open", {"angle": open_angle})
+                self.send_log_to_server("open", {"rotation_time": rotation_time})
             except Exception as e:
                 logger.error(f"먹이통 열기 실패: {e}")
                 self.send_log_to_server("error", {"message": str(e)})
 
     def close_feeder(self):
-        """먹이통 닫기"""
+        """먹이통 닫기 - 반시계방향으로 10바퀴 회전"""
         if self.is_open:
-            close_angle = self.config.get('close_angle', 0)
-            logger.info(f"먹이통 닫기 - {close_angle}도")
+            rotation_time = self.config.get('rotation_time', ROTATION_TIME)
+            logger.info(f"먹이통 닫기 - 반시계방향 {rotation_time}초 회전")
 
             try:
-                self.set_servo_position(close_angle)
+                self.rotate_servo('ccw', rotation_time)
                 self.is_open = False
-                self.send_log_to_server("close", {"angle": close_angle})
+                self.send_log_to_server("close", {"rotation_time": rotation_time})
             except Exception as e:
                 logger.error(f"먹이통 닫기 실패: {e}")
                 self.send_log_to_server("error", {"message": str(e)})

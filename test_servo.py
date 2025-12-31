@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-서보모터 테스트 스크립트
+연속 회전 서보모터 테스트 스크립트
 먹이통 개폐 동작을 테스트합니다.
 """
 
@@ -9,8 +9,10 @@ import time
 import sys
 
 SERVO_PIN = 12
-SERVO_MAX_DUTY = 12
-SERVO_MIN_DUTY = 3
+SERVO_STOP_DUTY = 7.5      # 정지
+SERVO_CW_DUTY = 12         # 시계방향 (열기)
+SERVO_CCW_DUTY = 3         # 반시계방향 (닫기)
+DEFAULT_ROTATION_TIME = 10  # 10바퀴 회전 시간 (초)
 
 def setup_gpio():
     """GPIO 설정"""
@@ -21,28 +23,40 @@ def setup_gpio():
     servo.start(0)
     return servo
 
-def set_servo_position(servo, degree):
-    """서보 위치 설정"""
-    if degree > 180:
-        degree = 180
-    elif degree < 0:
-        degree = 0
+def rotate_servo(servo, direction, duration):
+    """연속 회전 서보 제어
 
-    duty = SERVO_MIN_DUTY + (degree * (SERVO_MAX_DUTY - SERVO_MIN_DUTY) / 180.0)
-    print(f"각도: {degree}도 (Duty: {duty:.2f})")
+    Args:
+        servo: PWM 객체
+        direction: 'cw' (시계방향), 'ccw' (반시계방향), 'stop' (정지)
+        duration: 회전 시간 (초)
+    """
+    if direction == 'cw':
+        duty = SERVO_CW_DUTY
+        print(f"시계방향 회전 (Duty: {duty}) - {duration}초")
+    elif direction == 'ccw':
+        duty = SERVO_CCW_DUTY
+        print(f"반시계방향 회전 (Duty: {duty}) - {duration}초")
+    else:
+        duty = SERVO_STOP_DUTY
+        print(f"정지 (Duty: {duty})")
 
     servo.ChangeDutyCycle(duty)
-    time.sleep(0.5)
-    servo.ChangeDutyCycle(0)  # 떨림 방지
+    time.sleep(duration)
+    servo.ChangeDutyCycle(SERVO_STOP_DUTY)  # 정지
+    time.sleep(0.1)
+    servo.ChangeDutyCycle(0)  # PWM 신호 끄기
 
 def main():
     """메인 테스트 함수"""
-    print("서보모터 테스트 프로그램")
-    print("========================")
+    print("연속 회전 서보모터 테스트 프로그램")
+    print("==================================")
     print("명령어:")
-    print("  0-180: 해당 각도로 이동")
-    print("  open: 90도로 열기")
-    print("  close: 0도로 닫기")
+    print("  open: 시계방향 10바퀴 회전 (먹이통 열기)")
+    print("  close: 반시계방향 10바퀴 회전 (먹이통 닫기)")
+    print("  cw [초]: 시계방향으로 지정 시간 회전")
+    print("  ccw [초]: 반시계방향으로 지정 시간 회전")
+    print("  stop: 모터 정지")
     print("  test: 전체 동작 테스트")
     print("  quit: 종료")
     print()
@@ -52,49 +66,56 @@ def main():
     try:
         while True:
             cmd = input("명령 입력> ").strip().lower()
+            parts = cmd.split()
 
-            if cmd == 'quit' or cmd == 'q':
+            if not parts:
+                continue
+
+            command = parts[0]
+
+            if command == 'quit' or command == 'q':
                 break
-            elif cmd == 'open':
-                print("먹이통 열기 (90도)")
-                set_servo_position(servo, 90)
-            elif cmd == 'close':
-                print("먹이통 닫기 (0도)")
-                set_servo_position(servo, 0)
-            elif cmd == 'test':
+            elif command == 'open':
+                print(f"먹이통 열기 (시계방향 {DEFAULT_ROTATION_TIME}초)")
+                rotate_servo(servo, 'cw', DEFAULT_ROTATION_TIME)
+            elif command == 'close':
+                print(f"먹이통 닫기 (반시계방향 {DEFAULT_ROTATION_TIME}초)")
+                rotate_servo(servo, 'ccw', DEFAULT_ROTATION_TIME)
+            elif command == 'cw':
+                duration = float(parts[1]) if len(parts) > 1 else 1
+                rotate_servo(servo, 'cw', duration)
+            elif command == 'ccw':
+                duration = float(parts[1]) if len(parts) > 1 else 1
+                rotate_servo(servo, 'ccw', duration)
+            elif command == 'stop':
+                servo.ChangeDutyCycle(SERVO_STOP_DUTY)
+                time.sleep(0.1)
+                servo.ChangeDutyCycle(0)
+                print("모터 정지")
+            elif command == 'test':
                 print("전체 동작 테스트 시작...")
-                print("1. 초기 위치 (0도)")
-                set_servo_position(servo, 0)
+                print("1. 시계방향 3초 회전")
+                rotate_servo(servo, 'cw', 3)
                 time.sleep(1)
 
-                print("2. 먹이통 열기 (90도)")
-                set_servo_position(servo, 90)
-                time.sleep(2)
-
-                print("3. 부분 열기 (45도)")
-                set_servo_position(servo, 45)
+                print("2. 반시계방향 3초 회전")
+                rotate_servo(servo, 'ccw', 3)
                 time.sleep(1)
 
-                print("4. 완전 열기 (180도)")
-                set_servo_position(servo, 180)
+                print("3. 먹이통 열기 (10바퀴)")
+                rotate_servo(servo, 'cw', DEFAULT_ROTATION_TIME)
                 time.sleep(2)
 
-                print("5. 먹이통 닫기 (0도)")
-                set_servo_position(servo, 0)
+                print("4. 먹이통 닫기 (10바퀴)")
+                rotate_servo(servo, 'ccw', DEFAULT_ROTATION_TIME)
                 print("테스트 완료!")
             else:
-                try:
-                    angle = int(cmd)
-                    if 0 <= angle <= 180:
-                        set_servo_position(servo, angle)
-                    else:
-                        print("각도는 0-180 사이여야 합니다.")
-                except ValueError:
-                    print("올바른 명령어를 입력하세요.")
+                print("올바른 명령어를 입력하세요.")
 
     except KeyboardInterrupt:
         print("\n프로그램 종료...")
     finally:
+        servo.ChangeDutyCycle(0)
         servo.stop()
         GPIO.cleanup()
         print("GPIO 정리 완료")
