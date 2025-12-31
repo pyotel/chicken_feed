@@ -34,10 +34,10 @@ import { Activity, AlertCircle, CheckCircle, XCircle } from 'lucide-react'
 const getApiUrl = () => {
   if (typeof window !== 'undefined') {
     // Client-side: use same host but different port
-    return `http://${window.location.hostname}:3001`
+    return `http://${window.location.hostname}:37211`
   }
   // Server-side: use environment variable
-  return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+  return process.env.NEXT_PUBLIC_API_URL || 'http://ketiict.com:37211'
 }
 
 const API_URL = getApiUrl()

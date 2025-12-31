@@ -26,7 +26,7 @@ services:
       DATABASE_URL: postgresql://chicken_admin:${DB_PASSWORD:-chicken_secure_pass_2024}@postgres:5432/chicken_feed_db
       JWT_SECRET: ${JWT_SECRET:-chicken_jwt_secret_2024}
     ports:
-      - "3001:3001"
+      - "37211:3001"
     depends_on:
       - postgres
     networks:
@@ -40,7 +40,7 @@ services:
     build: ./frontend
     container_name: chicken-feed-frontend
     environment:
-      NEXT_PUBLIC_API_URL: http://localhost:3001
+      NEXT_PUBLIC_API_URL: http://ketiict.com:37211
     ports:
       - "37210:3000"
     depends_on:
