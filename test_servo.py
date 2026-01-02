@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-연속 회전 서보모터 테스트 스크립트
+각도 제어 서보모터 테스트 스크립트
 먹이통 개폐 동작을 테스트합니다.
 config.json에서 설정을 읽어옵니다.
 """
@@ -14,10 +14,10 @@ from pathlib import Path
 SERVO_PIN = 12
 
 # 기본값
-DEFAULT_STOP_DUTY = 7.5
-DEFAULT_CW_DUTY = 9.75
-DEFAULT_CCW_DUTY = 5.25
-DEFAULT_ROTATION_TIME = 10
+DEFAULT_MIN_DUTY = 2.5       # 0도
+DEFAULT_MAX_DUTY = 12.5      # 180도
+DEFAULT_OPEN_ANGLE = 120
+DEFAULT_CLOSE_ANGLE = 0
 
 def load_config():
     """config.json에서 설정 로드"""
@@ -39,54 +39,42 @@ def setup_gpio():
     servo.start(0)
     return servo
 
-def rotate_servo(servo, direction, duration, config):
-    """연속 회전 서보 제어
+def set_servo_angle(servo, angle, config):
+    """서보 각도 설정
 
     Args:
         servo: PWM 객체
-        direction: 'cw' (시계방향), 'ccw' (반시계방향), 'stop' (정지)
-        duration: 회전 시간 (초)
+        angle: 목표 각도 (0~180)
         config: 설정 딕셔너리
     """
-    stop_duty = config.get('servo_stop_duty', DEFAULT_STOP_DUTY)
-    cw_duty = config.get('servo_cw_duty', DEFAULT_CW_DUTY)
-    ccw_duty = config.get('servo_ccw_duty', DEFAULT_CCW_DUTY)
+    min_duty = config.get('servo_min_duty', DEFAULT_MIN_DUTY)
+    max_duty = config.get('servo_max_duty', DEFAULT_MAX_DUTY)
 
-    if direction == 'cw':
-        duty = cw_duty
-        print(f"시계방향 회전 (Duty: {duty}) - {duration}초")
-    elif direction == 'ccw':
-        duty = ccw_duty
-        print(f"반시계방향 회전 (Duty: {duty}) - {duration}초")
-    else:
-        duty = stop_duty
-        print(f"정지 (Duty: {duty})")
+    # 각도를 duty cycle로 변환
+    duty = min_duty + (angle / 180.0) * (max_duty - min_duty)
+
+    print(f"각도: {angle}도 (Duty: {duty:.2f})")
 
     servo.ChangeDutyCycle(duty)
-    time.sleep(duration)
-    servo.ChangeDutyCycle(stop_duty)  # 정지
-    time.sleep(0.1)
-    servo.ChangeDutyCycle(0)  # PWM 신호 끄기
+    time.sleep(0.5)
+    servo.ChangeDutyCycle(0)  # 떨림 방지
 
 def main():
     """메인 테스트 함수"""
     config = load_config()
-    rotation_time = config.get('rotation_time', DEFAULT_ROTATION_TIME)
-    stop_duty = config.get('servo_stop_duty', DEFAULT_STOP_DUTY)
+    open_angle = config.get('open_angle', DEFAULT_OPEN_ANGLE)
+    close_angle = config.get('close_angle', DEFAULT_CLOSE_ANGLE)
 
     print()
-    print("연속 회전 서보모터 테스트 프로그램")
+    print("각도 제어 서보모터 테스트 프로그램")
     print("==================================")
-    print(f"현재 설정: rotation_time={rotation_time}초, "
-          f"cw_duty={config.get('servo_cw_duty', DEFAULT_CW_DUTY)}, "
-          f"ccw_duty={config.get('servo_ccw_duty', DEFAULT_CCW_DUTY)}")
+    print(f"현재 설정: open_angle={open_angle}도, close_angle={close_angle}도")
+    print(f"duty 범위: {config.get('servo_min_duty', DEFAULT_MIN_DUTY)} ~ {config.get('servo_max_duty', DEFAULT_MAX_DUTY)}")
     print()
     print("명령어:")
-    print(f"  open: 시계방향 {rotation_time}초 회전 (먹이통 열기)")
-    print(f"  close: 반시계방향 {rotation_time}초 회전 (먹이통 닫기)")
-    print("  cw [초]: 시계방향으로 지정 시간 회전")
-    print("  ccw [초]: 반시계방향으로 지정 시간 회전")
-    print("  stop: 모터 정지")
+    print(f"  open: {open_angle}도로 열기")
+    print(f"  close: {close_angle}도로 닫기")
+    print("  0-180: 해당 각도로 이동")
     print("  test: 전체 동작 테스트")
     print("  reload: 설정 다시 로드")
     print("  quit: 종료")
@@ -97,55 +85,49 @@ def main():
     try:
         while True:
             cmd = input("명령 입력> ").strip().lower()
-            parts = cmd.split()
 
-            if not parts:
+            if not cmd:
                 continue
 
-            command = parts[0]
-
-            if command == 'quit' or command == 'q':
+            if cmd == 'quit' or cmd == 'q':
                 break
-            elif command == 'reload':
+            elif cmd == 'reload':
                 config = load_config()
-                rotation_time = config.get('rotation_time', DEFAULT_ROTATION_TIME)
-                print(f"설정 다시 로드됨: rotation_time={rotation_time}초")
-            elif command == 'open':
-                print(f"먹이통 열기 (시계방향 {rotation_time}초)")
-                rotate_servo(servo, 'cw', rotation_time, config)
-            elif command == 'close':
-                print(f"먹이통 닫기 (반시계방향 {rotation_time}초)")
-                rotate_servo(servo, 'ccw', rotation_time, config)
-            elif command == 'cw':
-                duration = float(parts[1]) if len(parts) > 1 else 1
-                rotate_servo(servo, 'cw', duration, config)
-            elif command == 'ccw':
-                duration = float(parts[1]) if len(parts) > 1 else 1
-                rotate_servo(servo, 'ccw', duration, config)
-            elif command == 'stop':
-                servo.ChangeDutyCycle(stop_duty)
-                time.sleep(0.1)
-                servo.ChangeDutyCycle(0)
-                print("모터 정지")
-            elif command == 'test':
+                open_angle = config.get('open_angle', DEFAULT_OPEN_ANGLE)
+                close_angle = config.get('close_angle', DEFAULT_CLOSE_ANGLE)
+                print(f"설정 다시 로드됨: open={open_angle}도, close={close_angle}도")
+            elif cmd == 'open':
+                print(f"먹이통 열기 ({open_angle}도)")
+                set_servo_angle(servo, open_angle, config)
+            elif cmd == 'close':
+                print(f"먹이통 닫기 ({close_angle}도)")
+                set_servo_angle(servo, close_angle, config)
+            elif cmd == 'test':
                 print("전체 동작 테스트 시작...")
-                print("1. 시계방향 3초 회전")
-                rotate_servo(servo, 'cw', 3, config)
+                print(f"1. 닫기 위치 ({close_angle}도)")
+                set_servo_angle(servo, close_angle, config)
                 time.sleep(1)
 
-                print("2. 반시계방향 3초 회전")
-                rotate_servo(servo, 'ccw', 3, config)
-                time.sleep(1)
-
-                print(f"3. 먹이통 열기 ({rotation_time}초)")
-                rotate_servo(servo, 'cw', rotation_time, config)
+                print(f"2. 열기 위치 ({open_angle}도)")
+                set_servo_angle(servo, open_angle, config)
                 time.sleep(2)
 
-                print(f"4. 먹이통 닫기 ({rotation_time}초)")
-                rotate_servo(servo, 'ccw', rotation_time, config)
+                print("3. 중간 위치 (60도)")
+                set_servo_angle(servo, 60, config)
+                time.sleep(1)
+
+                print(f"4. 닫기 위치 ({close_angle}도)")
+                set_servo_angle(servo, close_angle, config)
                 print("테스트 완료!")
             else:
-                print("올바른 명령어를 입력하세요.")
+                try:
+                    angle = int(cmd)
+                    if 0 <= angle <= 180:
+                        set_servo_angle(servo, angle, config)
+                    else:
+                        print("각도는 0-180 사이여야 합니다.")
+                except ValueError:
+                    print("올바른 명령어를 입력하세요.")
 
     except KeyboardInterrupt:
         print("\n프로그램 종료...")

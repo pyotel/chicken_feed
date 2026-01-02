@@ -16,12 +16,12 @@ from pathlib import Path
 import signal
 import sys
 
-# 서보모터 기본 설정 (연속 회전 서보)
+# 서보모터 기본 설정 (각도 제어 서보)
 SERVO_PIN = 12
-DEFAULT_STOP_DUTY = 7.5      # 정지
-DEFAULT_CW_DUTY = 9.75       # 시계방향 (열기) - 절반 속도
-DEFAULT_CCW_DUTY = 5.25      # 반시계방향 (닫기) - 절반 속도
-DEFAULT_ROTATION_TIME = 10   # 10바퀴 회전에 필요한 시간 (초)
+DEFAULT_MIN_DUTY = 2.5       # 0도 (500us/20ms)
+DEFAULT_MAX_DUTY = 12.5      # 180도 (2500us/20ms)
+DEFAULT_OPEN_ANGLE = 120     # 열기 각도
+DEFAULT_CLOSE_ANGLE = 0      # 닫기 각도
 
 # 한국 시간대 설정
 KST = timezone(timedelta(hours=9))
@@ -58,10 +58,10 @@ class ChickenFeederClient:
             default_config = {
                 "feeding_times": ["07:00", "12:00", "18:00"],
                 "feeding_duration_minutes": 30,
-                "rotation_time": DEFAULT_ROTATION_TIME,
-                "servo_stop_duty": DEFAULT_STOP_DUTY,
-                "servo_cw_duty": DEFAULT_CW_DUTY,
-                "servo_ccw_duty": DEFAULT_CCW_DUTY,
+                "open_angle": DEFAULT_OPEN_ANGLE,
+                "close_angle": DEFAULT_CLOSE_ANGLE,
+                "servo_min_duty": DEFAULT_MIN_DUTY,
+                "servo_max_duty": DEFAULT_MAX_DUTY,
                 "server_url": SERVER_URL,
                 "device_id": DEVICE_ID
             }
@@ -135,56 +135,48 @@ class ChickenFeederClient:
         except Exception as e:
             logger.error(f"로그 전송 중 오류: {e}")
 
-    def rotate_servo(self, direction, duration):
-        """연속 회전 서보 모터 제어
+    def set_servo_angle(self, angle):
+        """서보 모터 각도 설정
 
         Args:
-            direction: 'cw' (시계방향/열기) 또는 'ccw' (반시계방향/닫기)
-            duration: 회전 시간 (초)
+            angle: 목표 각도 (0~180)
         """
-        stop_duty = self.config.get('servo_stop_duty', DEFAULT_STOP_DUTY)
-        cw_duty = self.config.get('servo_cw_duty', DEFAULT_CW_DUTY)
-        ccw_duty = self.config.get('servo_ccw_duty', DEFAULT_CCW_DUTY)
+        min_duty = self.config.get('servo_min_duty', DEFAULT_MIN_DUTY)
+        max_duty = self.config.get('servo_max_duty', DEFAULT_MAX_DUTY)
 
-        if direction == 'cw':
-            duty = cw_duty
-        elif direction == 'ccw':
-            duty = ccw_duty
-        else:
-            duty = stop_duty
+        # 각도를 duty cycle로 변환 (0도=min_duty, 180도=max_duty)
+        duty = min_duty + (angle / 180.0) * (max_duty - min_duty)
 
-        logger.debug(f"서보 회전: {direction}, Duty: {duty}, 시간: {duration}초")
+        logger.debug(f"서보 각도: {angle}도, Duty: {duty:.2f}")
 
         self.servo.ChangeDutyCycle(duty)
-        time.sleep(duration)
-        self.servo.ChangeDutyCycle(stop_duty)  # 정지
-        time.sleep(0.1)
+        time.sleep(0.5)  # 서보가 위치에 도달할 시간
         self.servo.ChangeDutyCycle(0)  # PWM 신호 끄기 (떨림 방지)
 
     def open_feeder(self):
-        """먹이통 열기 - 시계방향으로 10바퀴 회전"""
+        """먹이통 열기"""
         if not self.is_open:
-            rotation_time = self.config.get('rotation_time', DEFAULT_ROTATION_TIME)
-            logger.info(f"먹이통 열기 - 시계방향 {rotation_time}초 회전")
+            open_angle = self.config.get('open_angle', DEFAULT_OPEN_ANGLE)
+            logger.info(f"먹이통 열기 - {open_angle}도")
 
             try:
-                self.rotate_servo('cw', rotation_time)
+                self.set_servo_angle(open_angle)
                 self.is_open = True
-                self.send_log_to_server("open", {"rotation_time": rotation_time})
+                self.send_log_to_server("open", {"angle": open_angle})
             except Exception as e:
                 logger.error(f"먹이통 열기 실패: {e}")
                 self.send_log_to_server("error", {"message": str(e)})
 
     def close_feeder(self):
-        """먹이통 닫기 - 반시계방향으로 10바퀴 회전"""
+        """먹이통 닫기"""
         if self.is_open:
-            rotation_time = self.config.get('rotation_time', DEFAULT_ROTATION_TIME)
-            logger.info(f"먹이통 닫기 - 반시계방향 {rotation_time}초 회전")
+            close_angle = self.config.get('close_angle', DEFAULT_CLOSE_ANGLE)
+            logger.info(f"먹이통 닫기 - {close_angle}도")
 
             try:
-                self.rotate_servo('ccw', rotation_time)
+                self.set_servo_angle(close_angle)
                 self.is_open = False
-                self.send_log_to_server("close", {"rotation_time": rotation_time})
+                self.send_log_to_server("close", {"angle": close_angle})
             except Exception as e:
                 logger.error(f"먹이통 닫기 실패: {e}")
                 self.send_log_to_server("error", {"message": str(e)})
