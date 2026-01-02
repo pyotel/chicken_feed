@@ -22,6 +22,7 @@ DEFAULT_MIN_DUTY = 2.5       # 0도 (500us/20ms)
 DEFAULT_MAX_DUTY = 12.5      # 180도 (2500us/20ms)
 DEFAULT_OPEN_ANGLE = 120     # 열기 각도
 DEFAULT_CLOSE_ANGLE = 0      # 닫기 각도
+DEFAULT_SERVO_MOVE_TIME = 0.5  # 서보 이동 시간 (초)
 
 # 한국 시간대 설정
 KST = timezone(timedelta(hours=9))
@@ -62,6 +63,7 @@ class ChickenFeederClient:
                 "close_angle": DEFAULT_CLOSE_ANGLE,
                 "servo_min_duty": DEFAULT_MIN_DUTY,
                 "servo_max_duty": DEFAULT_MAX_DUTY,
+                "servo_move_time": DEFAULT_SERVO_MOVE_TIME,
                 "server_url": SERVER_URL,
                 "device_id": DEVICE_ID
             }
@@ -143,14 +145,15 @@ class ChickenFeederClient:
         """
         min_duty = self.config.get('servo_min_duty', DEFAULT_MIN_DUTY)
         max_duty = self.config.get('servo_max_duty', DEFAULT_MAX_DUTY)
+        move_time = self.config.get('servo_move_time', DEFAULT_SERVO_MOVE_TIME)
 
         # 각도를 duty cycle로 변환 (0도=min_duty, 180도=max_duty)
         duty = min_duty + (angle / 180.0) * (max_duty - min_duty)
 
-        logger.debug(f"서보 각도: {angle}도, Duty: {duty:.2f}")
+        logger.debug(f"서보 각도: {angle}도, Duty: {duty:.2f}, 이동시간: {move_time}초")
 
         self.servo.ChangeDutyCycle(duty)
-        time.sleep(0.5)  # 서보가 위치에 도달할 시간
+        time.sleep(move_time)  # 서보가 위치에 도달할 시간
         self.servo.ChangeDutyCycle(0)  # PWM 신호 끄기 (떨림 방지)
 
     def open_feeder(self):

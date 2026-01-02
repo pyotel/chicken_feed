@@ -9,6 +9,7 @@
   "close_angle": 0,
   "servo_min_duty": 2.5,
   "servo_max_duty": 12.5,
+  "servo_move_time": 0.5,
   "server_url": "http://ketiict.com:37211",
   "device_id": "raspberry-pi-001",
   "description": {
@@ -18,6 +19,7 @@
     "close_angle": "먹이통 닫기 각도 (0~180)",
     "servo_min_duty": "서보 0도 duty (기본: 2.5)",
     "servo_max_duty": "서보 180도 duty (기본: 12.5)",
+    "servo_move_time": "서보 이동 대기 시간 (초, 기본: 0.5)",
     "server_url": "로깅 서버 API URL (원격 모니터링용)",
     "device_id": "장치 고유 식별자"
   }

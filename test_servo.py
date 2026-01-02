@@ -18,6 +18,7 @@ DEFAULT_MIN_DUTY = 2.5       # 0도
 DEFAULT_MAX_DUTY = 12.5      # 180도
 DEFAULT_OPEN_ANGLE = 120
 DEFAULT_CLOSE_ANGLE = 0
+DEFAULT_SERVO_MOVE_TIME = 0.5  # 서보 이동 시간
 
 def load_config():
     """config.json에서 설정 로드"""
@@ -49,14 +50,15 @@ def set_servo_angle(servo, angle, config):
     """
     min_duty = config.get('servo_min_duty', DEFAULT_MIN_DUTY)
     max_duty = config.get('servo_max_duty', DEFAULT_MAX_DUTY)
+    move_time = config.get('servo_move_time', DEFAULT_SERVO_MOVE_TIME)
 
     # 각도를 duty cycle로 변환
     duty = min_duty + (angle / 180.0) * (max_duty - min_duty)
 
-    print(f"각도: {angle}도 (Duty: {duty:.2f})")
+    print(f"각도: {angle}도 (Duty: {duty:.2f}, 이동시간: {move_time}초)")
 
     servo.ChangeDutyCycle(duty)
-    time.sleep(0.5)
+    time.sleep(move_time)
     servo.ChangeDutyCycle(0)  # 떨림 방지
 
 def main():
