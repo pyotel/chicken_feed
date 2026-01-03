@@ -5,11 +5,11 @@
     "18:00"
   ],
   "feeding_duration_minutes": 30,
-  "open_angle": 120,
+  "open_angle": 180,
   "close_angle": 0,
   "servo_min_duty": 2.5,
   "servo_max_duty": 12.5,
-  "servo_move_time": 0.5,
+  "servo_move_time": 3,
   "server_url": "http://ketiict.com:37211",
   "device_id": "raspberry-pi-001",
   "description": {
