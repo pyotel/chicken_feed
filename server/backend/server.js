@@ -66,6 +66,9 @@ const configUpdateSchema = Joi.object({
 // Store device configurations
 const deviceConfigs = new Map();
 
+// Store pending commands for devices
+const pendingCommands = new Map();
+
 // API Routes
 
 // Health check
@@ -219,6 +222,58 @@ app.get('/api/stats/:device_id', async (req, res) => {
     });
   } catch (error) {
     logger.error('Error fetching statistics:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Send command to device (from web UI)
+app.post('/api/device/command', (req, res) => {
+  try {
+    const { device_id, command } = req.body;
+
+    if (!device_id || !command) {
+      return res.status(400).json({ error: 'device_id and command are required' });
+    }
+
+    if (!['open', 'close'].includes(command)) {
+      return res.status(400).json({ error: 'Invalid command. Use "open" or "close"' });
+    }
+
+    // Add command to pending queue
+    pendingCommands.set(device_id, {
+      command,
+      timestamp: new Date(),
+      status: 'pending'
+    });
+
+    logger.info(`Command queued for ${device_id}: ${command}`);
+    res.json({ success: true, message: `Command "${command}" queued for device ${device_id}` });
+  } catch (error) {
+    logger.error('Error sending command:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get pending command for device (polled by client)
+app.get('/api/device/command/:device_id', (req, res) => {
+  try {
+    const { device_id } = req.params;
+    const pendingCommand = pendingCommands.get(device_id);
+
+    if (pendingCommand && pendingCommand.status === 'pending') {
+      // Mark as delivered and remove
+      pendingCommands.delete(device_id);
+      logger.info(`Command delivered to ${device_id}: ${pendingCommand.command}`);
+      res.json({
+        has_command: true,
+        command: pendingCommand.command,
+        timestamp: pendingCommand.timestamp
+      });
+    } else {
+      res.json({ has_command: false });
+    }
+  } catch (error) {
+    logger.error('Error fetching command:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

@@ -199,6 +199,35 @@ class ChickenFeederClient:
         logger.info(f"급여 종료 - {now.strftime('%Y-%m-%d %H:%M:%S KST')}")
         self.close_feeder()
 
+    def check_server_command(self):
+        """서버에서 원격 명령 확인 및 실행"""
+        try:
+            server_url = self.config.get('server_url', SERVER_URL)
+            device_id = self.config.get('device_id', DEVICE_ID)
+
+            response = requests.get(
+                f"{server_url}/api/device/command/{device_id}",
+                timeout=5
+            )
+
+            if response.status_code == 200:
+                data = response.json()
+                if data.get('has_command'):
+                    command = data.get('command')
+                    logger.info(f"서버 명령 수신: {command}")
+
+                    if command == 'open':
+                        # 강제로 열기 (is_open 상태 무시)
+                        self.is_open = False
+                        self.open_feeder()
+                    elif command == 'close':
+                        # 강제로 닫기 (is_open 상태 무시)
+                        self.is_open = True
+                        self.close_feeder()
+
+        except Exception as e:
+            logger.debug(f"서버 명령 확인 중 오류 (무시): {e}")
+
     def schedule_feedings(self):
         """급여 스케줄 설정"""
         schedule.clear()
@@ -239,7 +268,8 @@ class ChickenFeederClient:
         try:
             while True:
                 schedule.run_pending()
-                time.sleep(10)
+                self.check_server_command()  # 서버 명령 확인
+                time.sleep(5)  # 5초마다 확인
 
         except KeyboardInterrupt:
             logger.info("프로그램 종료 신호 받음")

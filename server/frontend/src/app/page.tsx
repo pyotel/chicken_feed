@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import {
   Table,
   TableBody,
@@ -28,7 +29,7 @@ import {
   Legend,
   ResponsiveContainer,
 } from 'recharts'
-import { Activity, AlertCircle, CheckCircle, XCircle } from 'lucide-react'
+import { Activity, AlertCircle, CheckCircle, XCircle, DoorOpen, DoorClosed } from 'lucide-react'
 
 // Use window location for API URL to work in any environment
 const getApiUrl = () => {
@@ -73,6 +74,8 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date())
+  const [commandLoading, setCommandLoading] = useState(false)
+  const [commandResult, setCommandResult] = useState<string | null>(null)
 
   const fetchData = async () => {
     try {
@@ -131,6 +134,29 @@ export default function Dashboard() {
     return () => clearInterval(interval)
   }, [])
 
+  const sendCommand = async (command: 'open' | 'close') => {
+    try {
+      setCommandLoading(true)
+      setCommandResult(null)
+
+      const response = await axios.post(`${API_URL}/api/device/command`, {
+        device_id: DEVICE_ID,
+        command
+      })
+
+      setCommandResult(`${command === 'open' ? '열기' : '닫기'} 명령이 전송되었습니다`)
+      setTimeout(() => setCommandResult(null), 3000)
+
+      // Refresh logs after command
+      setTimeout(fetchData, 2000)
+    } catch (err: any) {
+      console.error('Error sending command:', err)
+      setCommandResult(`명령 전송 실패: ${err.message}`)
+    } finally {
+      setCommandLoading(false)
+    }
+  }
+
   const getStatusBadge = (action: string) => {
     switch (action) {
       case 'open':
@@ -166,6 +192,36 @@ export default function Dashboard() {
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
+
+        {/* Manual Control */}
+        <Card className="mb-8">
+          <CardHeader>
+            <CardTitle>수동 조작</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex gap-4 items-center">
+              <Button
+                onClick={() => sendCommand('open')}
+                disabled={commandLoading}
+                className="bg-green-600 hover:bg-green-700"
+              >
+                <DoorOpen className="mr-2 h-4 w-4" />
+                먹이통 열기
+              </Button>
+              <Button
+                onClick={() => sendCommand('close')}
+                disabled={commandLoading}
+                className="bg-blue-600 hover:bg-blue-700"
+              >
+                <DoorClosed className="mr-2 h-4 w-4" />
+                먹이통 닫기
+              </Button>
+              {commandResult && (
+                <span className="text-sm text-gray-600">{commandResult}</span>
+              )}
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Summary Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
