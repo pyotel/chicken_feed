@@ -10,7 +10,7 @@ StandardOutput=journal
 StandardError=journal
 Restart=always
 RestartSec=10
-User=pyotel
+User=root
 Environment="PYTHONUNBUFFERED=1"
 
 [Install]
